@@ -13,10 +13,10 @@ import UIKit
 open class CollectionView: UICollectionView {
     override public func layoutSubviews() {
         // Give the layout a chance to invalidate itself when the bounds change.
-        if self.collectionViewLayout.shouldInvalidateLayout(forBoundsChange: self.bounds) {
-            let context = self.collectionViewLayout.invalidationContext(forBoundsChange: self.bounds)
-            self.collectionViewLayout.invalidateLayout(with: context)
-        }
+//        if self.collectionViewLayout.shouldInvalidateLayout(forBoundsChange: self.bounds) {
+//            let context = self.collectionViewLayout.invalidationContext(forBoundsChange: self.bounds)
+//            self.collectionViewLayout.invalidateLayout(with: context)
+//        }
         super.layoutSubviews()
     }
 }

@@ -11,6 +11,12 @@ import UIKit
 import AppKit
 #endif
 
+func log(_ context: String, _ items: Any...) {
+    #if DEBUG
+    //print("MBL [\(context)]:", items.map { "\($0)" }.joined(separator: " "))
+    #endif
+}
+
 
 
 // MARK: ModelBasedCollectionViewLayout
@@ -87,6 +93,7 @@ open class ModelBasedCollectionViewLayout<ModelType: LayoutModel>: NativeCollect
     // MARK: Prepare
     public override func prepare() {
         //self.debuggingRecorder?.record(.prepare)
+        log("native", "prepare")
         super.prepare()
         self.controller.prepareIfNeeded()
     }
@@ -94,25 +101,29 @@ open class ModelBasedCollectionViewLayout<ModelType: LayoutModel>: NativeCollect
     // MARK: Prepare: Animated Bounds Change
     public override func prepare(forAnimatedBoundsChange oldBounds: CGRect) {
         //self.debuggingRecorder?.record(.prepareForAnimatedBoundsChange(oldBound: oldBounds))
+        log("native", "prepareForAnimatedBoundsChange", oldBounds, self.collectionView!.bounds)
         super.prepare(forAnimatedBoundsChange: oldBounds)
-        self.controller.prepareIfNeeded()
+        self.controller.prepareForBoundsChange(oldBounds: oldBounds)
     }
     
     public override func finalizeAnimatedBoundsChange() {
         //self.debuggingRecorder?.record(.finalizeAnimatedBoundsChange)
         super.finalizeAnimatedBoundsChange()
         self.controller.finalize()
+        log("native", "finalizeAnimatedBoundsChange")
     }
-    
+
     // MARK: Prepare: Collection View Updates
     public override func prepare(forCollectionViewUpdates updateItems: [NativeCollectionViewUpdateItem]) {
         //self.debuggingRecorder?.record(.prepareForCollectionViewUpdates(updateItems: updateItems.map { .init(from: $0) }))
+        log("native", "prepareForCollectionViewUpdates")
         super.prepare(forCollectionViewUpdates: updateItems)
         self.controller.prepare(forCollectionViewUpdates: updateItems)
     }
     
     public override func finalizeCollectionViewUpdates() {
         //self.debuggingRecorder?.record(.finalizeCollectionViewUpdates)
+        log("native", "finalizeCollectionViewUpdates")
         super.finalizeCollectionViewUpdates()
         self.controller.finalize()
     }
@@ -149,6 +160,7 @@ open class ModelBasedCollectionViewLayout<ModelType: LayoutModel>: NativeCollect
     // MARK: Invalidation
     public func invalidateModel() {
         //self.debuggingRecorder?.record(.invalidateModel)
+        log("native", "invalidateModel")
         let context = InvalidationContext()
         context.invalidateModel = true
         self.invalidateLayout(with: context)
@@ -156,11 +168,13 @@ open class ModelBasedCollectionViewLayout<ModelType: LayoutModel>: NativeCollect
     
     public override func invalidateLayout() {
         //self.debuggingRecorder?.record(.invalidateLayout)
+        log("native", "invalidateLayout")
         super.invalidateLayout()
     }
     
     public override func invalidateLayout(with context: NativeCollectionViewLayoutInvalidationContext) {
         //self.debuggingRecorder?.record(.invalidateLayoutWith(context: .init(from: context as! InvalidationContext)))
+        log("native", "invalidateLayoutWithContext", "contentOffsetAdjustment:", context.contentOffsetAdjustment, "contentSizeAdjustment:", context.contentSizeAdjustment, "invalidateEverything=\(context.invalidateEverything)", "nInvaldiatedItemIndexPairs=\(context.invalidatedItemIndexPaths?.count)")
         super.invalidateLayout(with: context)
         
         if self.collectionView != nil {
@@ -169,6 +183,7 @@ open class ModelBasedCollectionViewLayout<ModelType: LayoutModel>: NativeCollect
     }
     
     public override func invalidationContext(forBoundsChange newBounds: CGRect) -> NativeCollectionViewLayoutInvalidationContext {
+        log("native", "invalidationContext(forBoundsChange:)", newBounds)
         let context = super.invalidationContext(forBoundsChange: newBounds)
         
         (context as! InvalidationContext).userCreatedContext = false
@@ -181,6 +196,7 @@ open class ModelBasedCollectionViewLayout<ModelType: LayoutModel>: NativeCollect
     }
     
     public override func shouldInvalidateLayout(forBoundsChange newBounds: CGRect) -> Bool {
+        log("native", "shouldInvalidateLayout(forBoundsChange:)", newBounds)
         let result = self.controller.shouldInvalidateLayout(forBoundsChange: newBounds)
         //self.debuggingRecorder?.record(.shouldInvalidateLayoutForBoundsChange(newBounds: newBounds, result: result))
         return result
@@ -189,6 +205,7 @@ open class ModelBasedCollectionViewLayout<ModelType: LayoutModel>: NativeCollect
     // MARK: Self Sizing Cells
     
     public override func shouldInvalidateLayout(forPreferredLayoutAttributes preferredAttributes: NativeCollectionViewLayoutAttributes, withOriginalAttributes originalAttributes: NativeCollectionViewLayoutAttributes) -> Bool {
+
         guard let element = Element(preferredAttributes) else { return false }
         let result = self.controller.shouldInvalidateLayout(forSelfSizingElement: element,
                                                             preferredSize: preferredAttributes.size)
@@ -216,12 +233,14 @@ open class ModelBasedCollectionViewLayout<ModelType: LayoutModel>: NativeCollect
     
     // MARK: Target Content Offset
     public override func targetContentOffset(forProposedContentOffset proposedContentOffset: CGPoint) -> CGPoint {
+        log("native", "targetContentOffset(forProposedContentOffset:)", proposedContentOffset)
         let result = self.controller.targetContentOffset(forProposedContentOffset: proposedContentOffset)
         //self.debuggingRecorder?.record(.targetContentOffsetForProposedContentOffset(proposedContentOffset: proposedContentOffset, velocity: nil, result: result))
         return result
     }
     
     public override func targetContentOffset(forProposedContentOffset proposedContentOffset: CGPoint, withScrollingVelocity velocity: CGPoint) -> CGPoint {
+        log("native", "targetContentOffset(forProposedContentOffset:, withScrollingVelocity:)", proposedContentOffset, velocity)
         let result = self.controller.targetContentOffset(forProposedContentOffset: proposedContentOffset, withScrollingVelocity: velocity)
         //self.debuggingRecorder?.record(.targetContentOffsetForProposedContentOffset(proposedContentOffset: proposedContentOffset, velocity: velocity, result: result))
         return result
@@ -230,6 +249,7 @@ open class ModelBasedCollectionViewLayout<ModelType: LayoutModel>: NativeCollect
     // MARK: Attrs in Rect
 #if canImport(UIKit)
     public override func layoutAttributesForElements(in rect: CGRect) -> [NativeCollectionViewLayoutAttributes]? {
+        log("native", "layoutAttributesForElements(in:)", "rect=\(rect)")
         let result = self.controller.layoutAttributesForElements(in: rect)
         //self.debuggingRecorder?.record(.layoutAttributesForElements(rect: rect, result: result))
         return result?.map {$0.forLayout()}

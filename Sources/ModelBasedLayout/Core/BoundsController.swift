@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import QuartzCore
 
 
 class BoundsController {
@@ -22,7 +21,6 @@ class BoundsController {
     }
     private var state: State = .initializing
     
-    private var cachedBoundsInfo: BoundsInfo?
     
     var boundsInfo: BoundsInfo {
         self.updateBoundsIfNeeded()
@@ -49,6 +47,9 @@ class BoundsController {
     }
     
     func freeze() {
+        if state == .initializing {
+            self._boundsInfo = self.boundsInfoProvider()
+        }
         self.state = .frozen
     }
     
@@ -59,20 +60,6 @@ class BoundsController {
 
         guard self.updateBounds(newBoundsInfo.bounds) else { return }
 
-        if self._boundsInfo.safeAreaInsets != newBoundsInfo.safeAreaInsets {
-            // If the view hieranchy of the collectionView is transitioning to another size (e.g. on device rotation), often times multiple layout passes are performed.
-            // E.g.: safeAreaInsets updated -> layout pass -> viewSize updated -> layoutPass
-            // This is a problem for us, because we need the initial BoundsInfo and the final BoundsInfo in order to correctly calculate contentOffsetAdjustments etc.
-            // However, the BoundsController will only be frozen once the viewSize is update, at which point the safeAreaInsets already have been updated which we would now need to revert.
-            // Therefore, we cache the boundsInfo everytime the safeAreaInsets change for the duration of the CATransaction in which they change. This allows us to reset the safeAreaInsets in case the BoundsController is frozen afterwards.
-            self.cachedBoundsInfo = self._boundsInfo
-            let completionBlock = CATransaction.completionBlock()
-            CATransaction.setCompletionBlock { [weak self] in
-                self?.cachedBoundsInfo = nil
-                completionBlock?()
-            }
-        }
-        
         self._boundsInfo = newBoundsInfo
         self.state = .valid
     }
@@ -90,10 +77,6 @@ class BoundsController {
     func updateBounds(_ newBounds: CGRect) -> Bool {
         guard newBounds.size == self.viewSize else {
             if self.state != .initializing {
-                if let cachedBoundsInfo = self.cachedBoundsInfo {
-                    // If the viewSize changes, the safeAreaInsets may also have changed. If thats the case, we will have cached it earlier and can now rely on that cached value.
-                    self._boundsInfo = cachedBoundsInfo
-                }
                 self.freeze()
             }
             return false

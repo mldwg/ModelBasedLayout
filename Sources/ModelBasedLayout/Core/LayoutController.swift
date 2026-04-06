@@ -16,11 +16,16 @@ class LayoutController<ModelType: LayoutModel> {
     
     private var targetContentOffset: CGPoint? = nil
     private var targetContentOffsetAdjustment: CGPoint = .zero
-    
+    private var contentOffsetAnchor: ContentOffsetAnchor? = nil
+
     private(set) var boundsInfoProvider: () -> BoundsInfo
-    
-    private var needsToPrepare: Bool = false
+
+    /// The layout was invalidated and the controller has not run prepare yet.
+    private var needsPrepare: Bool = false
     private var lastInvalidatedBounds: CGRect? = nil
+
+
+    //private let transactionTracker = TransactionTracker()
     
     init(_ model: @escaping (_ dataSourceCounts: DataSourceCounts, _ geometryInfo: GeometryInfo) -> ModelType,
          dataSourceCounts: @escaping () -> DataSourceCounts,
@@ -63,7 +68,7 @@ class LayoutController<ModelType: LayoutModel> {
     
     // MARK: Prepare & Finalize
     func prepareIfNeeded() {
-        guard self.needsToPrepare else { return }
+        guard self.needsPrepare else { return }
         
         if self.layoutModel(.afterUpdate) == nil {
             self.stateController.pushNewLayout()
@@ -78,7 +83,18 @@ class LayoutController<ModelType: LayoutModel> {
         self.layoutModel(.afterUpdate)?.prepare()
         self.layoutModel(.beforeUpdate)?.prepare()
         
-        self.needsToPrepare = false
+
+        self.needsPrepare = false
+    }
+    
+    func prepareForBoundsChange(oldBounds: CGRect) {
+        prepareIfNeeded()
+        prepareContentOffsetAnchor(oldBounds: oldBounds)
+        if self.dataSourceCounts(.beforeUpdate) == nil && self.geometryInfo(.afterUpdate) != stateController.geometryInfoProvider() {
+            self.stateController.pushNewLayout()
+        }
+        self.boundsController(.beforeUpdate)?.freeze()
+        self.stickyController(.beforeUpdate)?.willBeReplaced()
     }
     
     func prepare(forCollectionViewUpdates updateItems: [NativeCollectionViewUpdateItem]) {
@@ -91,6 +107,7 @@ class LayoutController<ModelType: LayoutModel> {
             self.stateController.pushNewLayout()
         }
         
+        // Create DataBatchUpdate to be able to match new and old index pairs and to determine which items are reloaded, moved, inserted or deleted. 
         if let dataSourceCountsBeforeUpdate = self.dataSourceCounts(.beforeUpdate) {
             self.dataChange = DataBatchUpdate(dataSourceCounts: dataSourceCountsBeforeUpdate, updateItems: updateItems)
         }
@@ -107,17 +124,28 @@ class LayoutController<ModelType: LayoutModel> {
         self.dataChange = nil
         self.targetContentOffsetAdjustment = .zero
         self.targetContentOffset = nil
+        self.contentOffsetAnchor = nil
     }
     
     private func usesStickyViews() -> Bool {
         self.stickyController(.afterUpdate)?.usesStickyViews ?? false
     }
     
+    private func prepareContentOffsetAnchor(oldBounds: CGRect) -> ContentOffsetAnchor? {
+        if contentOffsetAnchor == nil, var currentBounds = self.boundsController(.afterUpdate)?.boundsInfo {
+            if currentBounds.bounds.size == oldBounds.size {
+                currentBounds.bounds = oldBounds
+            }
+            contentOffsetAnchor = stateController.layout(.afterUpdate)?.model.contentOffsetAnchor(in: currentBounds)
+        }
+        return contentOffsetAnchor
+    }
+    
     // MARK: Content Offset Adjustment
     private func prepareTargetContentOffset() {
         guard let before = self.stateController.layout(.beforeUpdate),
               let after = self.stateController.layout(.afterUpdate),
-              let result = self.targetContentOffset(from: before, to: after) else {
+              let result = self.targetContentOffset(from: before, to: after, newBounds: nil) else {
             return
             
         }
@@ -138,14 +166,21 @@ class LayoutController<ModelType: LayoutModel> {
         return targetContentOffset
     }
     
-    private func targetContentOffset(from originContainer: LayoutContainer<ModelType>, to targetContainer: LayoutContainer<ModelType>) -> CGPoint? {
+    private func targetContentOffset(from originContainer: LayoutContainer<ModelType>, to targetContainer: LayoutContainer<ModelType>, newBounds: CGRect?) -> CGPoint? {
         let oldBounds = originContainer.boundsController.boundsInfo
-        let newBoundsInfo = self.boundsInfoProvider()
+        var newBoundsInfo = self.boundsInfoProvider()
+        if let newBounds {
+            newBoundsInfo.bounds = newBounds
+        }
+        guard oldBounds.bounds.size > .zero && newBoundsInfo.bounds.size > .zero else {
+            return nil
+        }
         
-        guard oldBounds.bounds.size > .zero && newBoundsInfo.bounds.size > .zero else { return nil }
+        guard var contentOffsetAnchor = prepareContentOffsetAnchor(oldBounds: oldBounds.bounds) else {
+            return nil
+        }
         
-        guard var contentOffsetAnchor = originContainer.model.contentOffsetAnchor(in: oldBounds) else { return nil }
-        
+
         if let dataChange = dataChange {
             if let updatedIndexPair = dataChange.indexPairAfterUpdate(for: contentOffsetAnchor.element.indexPair) {
                 contentOffsetAnchor.element.indexPair = updatedIndexPair
@@ -168,6 +203,7 @@ class LayoutController<ModelType: LayoutModel> {
         let result = CGPoint(x: max(minContentOffset.x, min(maxContentOffset.x, newContentOffset.x)),
                              y: max(minContentOffset.y, min(maxContentOffset.y, newContentOffset.y)))
         
+        log("controller", "targetContentOffset", "anchor: \(contentOffsetAnchor.element), result: \(result)")
         return result
     }
     
@@ -214,6 +250,15 @@ class LayoutController<ModelType: LayoutModel> {
             return true
         }
         
+        // When a bounds change animation involves a size change (rotation), true must be returned
+        // once so UIKit discards its per-cell attribute cache and re-queries the visible rect.
+        // Without this, cells whose attributes were already cached from a previous portrait query would never
+        // be refreshed to their correct landscape positions when the new viewport falls inside that cached range.
+        if let viewSizeBeforeUpdate =  self.geometryInfo(.beforeUpdate)?.viewSize,
+           newBounds.size != viewSizeBeforeUpdate {
+            return true
+        }
+
         if self.stickyController(.afterUpdate)?.shouldInvalidateLayout(forBoundsChange: newBounds) == true {
             return true
         }
@@ -230,31 +275,33 @@ class LayoutController<ModelType: LayoutModel> {
     }
     
     func configureInvalidationContext(context: InvalidationContext, forBoundsChange newBounds: CGRect) {
-        
         guard let geometryBefore = self.geometryInfo(.afterUpdate), geometryBefore.viewSize != .zero else {
             
             // If we are in the initial layout pass after the collectionView was instanciated, we may have a cached viewSize of zero.
             // In such a case, performing any actual invalidation (e.g. contentOffsetAdjusten) would be pointless and can cause crashes.
             // Therefore, simply replace the model and move on.
-            // Note: This case should no longer happen due to models only beaing created when the viewSize is not zero, but we keep this check here just for additional safety.
+            // Note: This case should no longer happen due to models only being created when the viewSize is not zero, but this check is kept here just for additional safety.
             context.invalidateModel = true
             return
         }
 
         if newBounds.size != geometryBefore.viewSize,
-           let currentLayout = self.stateController.layout(.afterUpdate),
+           let afterLayout = self.stateController.layout(.afterUpdate),
            !context.invalidateGeometryInfo {
             // If the viewSize changed, setup the contentSizeAdjustment and contentOffsetAdjustment of the InvalidationContext.
             
             context.invalidateGeometryInfo = true
             
             if let newLayout = self.stateController.makeNewLayout(forNewBounds: newBounds) {
-                context.contentSizeAdjustment = newLayout.model.contentSize - currentLayout.model.contentSize
+                context.contentSizeAdjustment = newLayout.model.contentSize - afterLayout.model.contentSize
                 
-                if let target = self.targetContentOffset(from: currentLayout, to: newLayout) {
-                    context.contentOffsetAdjustment = (target - boundsInfoProvider().bounds.origin)
+                let currentBounds = boundsInfoProvider().bounds
+                
+                if let target = self.targetContentOffset(from: afterLayout, to: newLayout, newBounds: newBounds) {
+                    log("controller", "configureInvalidationContext", "targetContentOffset: \(target)")
+                    context.contentOffsetAdjustment = (target - currentBounds.origin)
                 } else {
-                    context.contentOffsetAdjustment = self.contentOffsetAdjustmentFalback(from: currentLayout, to: newLayout).cgPoint
+                    context.contentOffsetAdjustment = self.contentOffsetAdjustmentFalback(from: afterLayout, to: newLayout).cgPoint
                 }
             }
         }
@@ -278,7 +325,7 @@ class LayoutController<ModelType: LayoutModel> {
     }
     
     func invalidateLayout(with context: InvalidationContext) {
-        self.needsToPrepare = true
+        self.needsPrepare = true
         
         self.stickyController(.afterUpdate)?.invalidate(with: context)
         
