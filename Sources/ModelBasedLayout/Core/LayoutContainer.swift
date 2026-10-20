@@ -16,3 +16,10 @@ struct LayoutContainer<ModelType: LayoutModel> {
     var model: ModelType
 }
 
+extension LayoutContainer {
+    func freeze() {
+        boundsController.freeze()
+        stickyController.willBeReplaced()
+    }
+}
+

@@ -18,14 +18,11 @@ class LayoutStateController<ModelType: LayoutModel> {
     
     private var layoutAfterUpdate: LayoutContainer<ModelType>?
     private var layoutBeforeUpdate: LayoutContainer<ModelType>?
-    private var layoutBeforeUpdatePass: UInt64 = 0
     private var canOverwriteLayoutBeforeUpdate: Bool = true
     
     private var cachedLayout: LayoutContainer<ModelType>?
     
-    private var layoutPass: UInt64 = 0
     
-
     var isTransitioning: Bool {
         self.layoutBeforeUpdate != nil
     }
@@ -58,12 +55,9 @@ class LayoutStateController<ModelType: LayoutModel> {
     func pushNewLayout() {
         if self.canOverwriteLayoutBeforeUpdate {
             self.layoutBeforeUpdate = self.layoutAfterUpdate
-            self.layoutBeforeUpdatePass = self.layoutPass
         }
         
-        
-        self.layoutPass += 1
-        
+        self.layoutBeforeUpdate?.freeze()
         self.layoutAfterUpdate = self.makeNewLayout()
         self.cachedLayout = nil
     }

@@ -93,8 +93,6 @@ class LayoutController<ModelType: LayoutModel> {
         if self.dataSourceCounts(.beforeUpdate) == nil && self.geometryInfo(.afterUpdate) != stateController.geometryInfoProvider() {
             self.stateController.pushNewLayout()
         }
-        self.boundsController(.beforeUpdate)?.freeze()
-        self.stickyController(.beforeUpdate)?.willBeReplaced()
     }
     
     func prepare(forCollectionViewUpdates updateItems: [NativeCollectionViewUpdateItem]) {
@@ -331,8 +329,6 @@ class LayoutController<ModelType: LayoutModel> {
         
         if context.invalidateDataSourceCounts || context.invalidateEverything || context.invalidateModel || context.invalidateGeometryInfo  {
             self.stateController.pushNewLayout()
-            self.boundsController(.beforeUpdate)?.freeze()
-            self.stickyController(.beforeUpdate)?.willBeReplaced()
         }
         
         self.boundsController(.afterUpdate)?.invalidate()
