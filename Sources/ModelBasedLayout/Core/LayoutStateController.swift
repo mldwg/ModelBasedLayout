@@ -99,6 +99,12 @@ class LayoutStateController<ModelType: LayoutModel> {
         return self.cachedLayout!
     }
     
+    func setLayoutBefore(_ container: LayoutContainer<ModelType>) {
+        guard canOverwriteLayoutBeforeUpdate else { return }
+        container.freeze()
+        layoutBeforeUpdate = container
+    }
+
     func clearLayoutBefore() {
         self.layoutBeforeUpdate = nil
     }

@@ -21,7 +21,7 @@ class LayoutController<ModelType: LayoutModel> {
     private(set) var boundsInfoProvider: () -> BoundsInfo
 
     /// The layout was invalidated and the controller has not run prepare yet.
-    private var needsPrepare: Bool = false
+    private var needsPrepare: Bool = true
     private var lastInvalidatedBounds: CGRect? = nil
 
 
@@ -56,6 +56,10 @@ class LayoutController<ModelType: LayoutModel> {
     
     private func boundsController(_ state: LayoutState) -> BoundsController? {
         self.stateController.layout(state)?.boundsController
+    }
+    
+    private func layout(_ state: LayoutState) -> LayoutContainer<ModelType>? {
+        self.stateController.layout(state)
     }
     
     // MARK: Content Size
@@ -95,6 +99,22 @@ class LayoutController<ModelType: LayoutModel> {
         }
     }
     
+    func prepareForTransition(from oldController: LayoutController<ModelType>) {
+        prepareIfNeeded()
+
+        guard let oldLayoutContainer = oldController.stateController.layout(.afterUpdate) else { return }
+
+        // Compute the anchor from the OLD layout at its current scroll position, before
+        // setting .beforeUpdate, so we use the old model rather than the new one.
+        if contentOffsetAnchor == nil {
+            contentOffsetAnchor = oldLayoutContainer.model.contentOffsetAnchor(in: oldLayoutContainer.boundsController.boundsInfo)
+        }
+        
+        // Register the old layout as .beforeUpdate so targetContentOffset and
+        // initialLayoutAttributesForAppearing can reference its positions.
+        self.stateController.setLayoutBefore(oldLayoutContainer)
+    }
+
     func prepare(forCollectionViewUpdates updateItems: [NativeCollectionViewUpdateItem]) {
         self.prepareIfNeeded()
         

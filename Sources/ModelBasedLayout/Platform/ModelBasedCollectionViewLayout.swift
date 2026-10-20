@@ -129,33 +129,40 @@ open class ModelBasedCollectionViewLayout<ModelType: LayoutModel>: NativeCollect
     }
     
     // MARK: Prepare: Transitions
-    //    public override func prepareForTransition(from oldLayout: UICollectionViewLayout) {
-    //        if let transitionLayout = oldLayout as? UICollectionViewTransitionLayout {
-    //            self.transitionLayout = transitionLayout
-    //            self.transitioningFrom = transitionLayout.currentLayout
-    //        } else {
-    //            self.transitioningFrom = oldLayout
-    //        }
-    //
-    //        super.prepareForTransition(from: oldLayout)
-    //    }
-    //
-    //    public override func prepareForTransition(to newLayout: UICollectionViewLayout) {
-    //        if let transitionLayout = newLayout as? UICollectionViewTransitionLayout {
-    //            self.transitionLayout = transitionLayout
-    //            self.transitioningTo = transitionLayout.nextLayout
-    //        } else {
-    //            self.transitioningTo = newLayout
-    //        }
-    //
-    //        super.prepareForTransition(to: newLayout)
-    //    }
-    //
-    //    public override func finalizeLayoutTransition() {
-    //        self.transitioningFrom = nil
-    //        self.transitioningTo = nil
-    //        super.finalizeLayoutTransition()
-    //    }
+    public override func prepareForTransition(from oldLayout: UICollectionViewLayout) {
+        if let transitionLayout = oldLayout as? UICollectionViewTransitionLayout {
+            self.transitionLayout = transitionLayout
+            self.transitioningFrom = transitionLayout.currentLayout
+        } else {
+            self.transitioningFrom = oldLayout
+        }
+
+        // When transitioning from the same ModelType, wire up .beforeUpdate and the content
+        // offset anchor so targetContentOffset and initialLayoutAttributesForAppearing work.
+        if let oldMBL = self.transitioningFrom as? ModelBasedCollectionViewLayout<ModelType> {
+            self.controller.prepareForTransition(from: oldMBL.controller)
+        }
+
+        super.prepareForTransition(from: oldLayout)
+    }
+
+    public override func prepareForTransition(to newLayout: UICollectionViewLayout) {
+        if let transitionLayout = newLayout as? UICollectionViewTransitionLayout {
+            self.transitionLayout = transitionLayout
+            self.transitioningTo = transitionLayout.nextLayout
+        } else {
+            self.transitioningTo = newLayout
+        }
+
+        super.prepareForTransition(to: newLayout)
+    }
+
+    public override func finalizeLayoutTransition() {
+        self.controller.finalize()
+        self.transitioningFrom = nil
+        self.transitioningTo = nil
+        super.finalizeLayoutTransition()
+    }
     
     // MARK: Invalidation
     public func invalidateModel() {
@@ -268,6 +275,11 @@ open class ModelBasedCollectionViewLayout<ModelType: LayoutModel>: NativeCollect
         guard indexPath.count == 2 else { return nil }
         let result = self.controller.layoutAttributes(forAppearingItemAt: .init(indexPath))
         //self.debuggingRecorder?.record(.initialLayoutAttributesForAppearingItem(indexPath: .init(indexPath), result: result))
+        // When transitioning from a different layout type, .beforeUpdate is not populated,
+        // so fall back to querying the old layout directly for a smooth animation.
+        if result == nil, transitioningFrom != nil {
+            return transitioningFrom?.layoutAttributesForItem(at: indexPath)
+        }
         return result?.forLayout()
     }
     
@@ -280,6 +292,11 @@ open class ModelBasedCollectionViewLayout<ModelType: LayoutModel>: NativeCollect
     
     public override func finalLayoutAttributesForDisappearingItem(at indexPath: IndexPath) -> NativeCollectionViewLayoutAttributes? {
         guard indexPath.count == 2 else { return nil }
+        // During a layout transition, animate disappearing cells to their position in the new
+        // layout so the motion is continuous with the appearing cells on the new layout.
+        if let newAttrs = transitioningTo?.layoutAttributesForItem(at: indexPath) {
+            return newAttrs
+        }
         let result = self.controller.layoutAttributes(forDisappearingItemAt: .init(indexPath))
         //self.debuggingRecorder?.record(.finalLayoutAttributesForDisappearingItem(indexPath: .init(indexPath), result: result))
         return result?.forLayout()
@@ -291,6 +308,9 @@ open class ModelBasedCollectionViewLayout<ModelType: LayoutModel>: NativeCollect
         let element = Element(indexPair: .init(indexPath), elementKind: .init(supplementaryOfKind: elementKind))
         let result = self.controller.layoutAttributes(forAppearingSupplementaryElement: element)
         //self.debuggingRecorder?.record(.initialLayoutAttributesForAppearingSupplementaryElement(elementKind: elementKind, indexPath: .init(indexPath), result: result))
+        if result == nil, transitioningFrom != nil {
+            return transitioningFrom?.layoutAttributesForSupplementaryView(ofKind: elementKind, at: indexPath)
+        }
         return result?.forLayout()
     }
     
@@ -304,6 +324,9 @@ open class ModelBasedCollectionViewLayout<ModelType: LayoutModel>: NativeCollect
     
     public override func finalLayoutAttributesForDisappearingSupplementaryElement(ofKind elementKind: String, at indexPath: IndexPath) -> NativeCollectionViewLayoutAttributes? {
         guard indexPath.count == 2 else { return nil }
+        if transitioningTo != nil, let newAttrs = transitioningTo?.layoutAttributesForSupplementaryView(ofKind: elementKind, at: indexPath) {
+            return newAttrs
+        }
         let element = Element(indexPair: .init(indexPath), elementKind: .init(supplementaryOfKind: elementKind))
         let result = self.controller.layoutAttributes(forDisappearingSupplementaryElement: element)
         //self.debuggingRecorder?.record(.finalLayoutAttributesForDisappearingSupplementaryElement(elementKind: elementKind, indexPath: .init(indexPath), result: result))
