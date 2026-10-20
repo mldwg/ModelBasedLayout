@@ -38,7 +38,10 @@ class ChunkedRectMap<Value: Hashable> {
     
     private func chunkIds(for rect: CGRect) -> [ChunkId] {
         let topLeft = chunkId(for: rect.origin)
-        let bottomRight = chunkId(for: CGPoint(x: rect.maxX - 0.0000001, y: rect.maxY - 0.0000001))
+        var bottomRight = chunkId(for: CGPoint(x: rect.maxX - 0.0000001, y: rect.maxY - 0.0000001))
+        // Rects with zero width or height on a chunk boundary would otherwise end before they start.
+        bottomRight.row = Swift.max(bottomRight.row, topLeft.row)
+        bottomRight.col = Swift.max(bottomRight.col, topLeft.col)
         
         var result: [ChunkId] = []
         for row in topLeft.row...bottomRight.row {
@@ -69,6 +72,8 @@ class ChunkedRectMap<Value: Hashable> {
     }
     
     func insert(_ value: Value, with rect: CGRect) {
+        remove(value: value)
+        
         let chunkIds = chunkIds(for: rect)
         for chunkId in chunkIds {
             insert(value, into: chunkId)
@@ -94,6 +99,7 @@ class ChunkedRectMap<Value: Hashable> {
     
     func removeAll(keepingCapacity: Bool = false) {
         self.data.removeAll(keepingCapacity: keepingCapacity)
+        self.rectsForValues.removeAll(keepingCapacity: keepingCapacity)
         self.count = 0
     }
 }
