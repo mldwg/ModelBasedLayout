@@ -65,8 +65,6 @@ enum DataUpdate: Hashable {
             }
             
             
-            
-            
         default:
             return nil
         }

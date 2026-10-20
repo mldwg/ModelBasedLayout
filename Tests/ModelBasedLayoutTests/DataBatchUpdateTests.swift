@@ -396,4 +396,43 @@ final class DataBatchUpdateTests: XCTestCase {
             _ = DataBatchUpdate(dataSourceCounts: dataSourceCounts, updateItems: updates)
         }
     }
+
+    /// A section is inserted in front, so all old sections shift, and an item moves from an old section into the new one.
+    /// The deletion half of such a move has to be applied to the old section at its index after the update.
+    func testMoveItemIntoInsertedSectionWhileSectionsShift() throws {
+        let dataSourceCounts = DataSourceCounts(sections: [2, 10])
+        
+        let updates: [DataUpdate] = [
+            .insertSection(sectionIndex: 0),
+            .moveItem(indexPairBeforeUpdate: IndexPair(item: 9, section: 1), indexPairAfterUpdate: IndexPair(item: 0, section: 0)),
+        ]
+        let changes = DataBatchUpdate(dataSourceCounts: dataSourceCounts, updateItems: updates)
+        
+        XCTAssertEqual(changes.indexPairAfterUpdate(for: IndexPair(item: 0, section: 0)), IndexPair(item: 0, section: 1))
+        XCTAssertEqual(changes.indexPairAfterUpdate(for: IndexPair(item: 1, section: 0)), IndexPair(item: 1, section: 1))
+        for item in 0..<9 {
+            XCTAssertEqual(changes.indexPairAfterUpdate(for: IndexPair(item: item, section: 1)), IndexPair(item: item, section: 2))
+        }
+        XCTAssertEqual(changes.indexPairAfterUpdate(for: IndexPair(item: 9, section: 1)), IndexPair(item: 0, section: 0))
+    }
+    
+    /// Section indices shift so that the old and new section index of a move are equal, even though the item changes sections.
+    func testMoveItemBetweenSectionsWithEqualIndicesAfterShift() throws {
+        let dataSourceCounts = DataSourceCounts(sections: [3, 5])
+        
+        let updates: [DataUpdate] = [
+            .deleteSection(sectionIndex: 0),
+            .insertSection(sectionIndex: 1),
+            .moveItem(indexPairBeforeUpdate: IndexPair(item: 4, section: 1), indexPairAfterUpdate: IndexPair(item: 0, section: 1)),
+        ]
+        let changes = DataBatchUpdate(dataSourceCounts: dataSourceCounts, updateItems: updates)
+        
+        for item in 0..<3 {
+            XCTAssertEqual(changes.indexPairAfterUpdate(for: IndexPair(item: item, section: 0)), nil)
+        }
+        for item in 0..<4 {
+            XCTAssertEqual(changes.indexPairAfterUpdate(for: IndexPair(item: item, section: 1)), IndexPair(item: item, section: 0))
+        }
+        XCTAssertEqual(changes.indexPairAfterUpdate(for: IndexPair(item: 4, section: 1)), IndexPair(item: 0, section: 1))
+    }
 }

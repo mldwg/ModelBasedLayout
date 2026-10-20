@@ -102,10 +102,15 @@ struct DataBatchUpdate {
         }
         
         for (indexPairBeforeUpdate, indexPairAfterUpdate) in itemMoves {
-            if indexPairBeforeUpdate.section == indexPairAfterUpdate.section {
+            // Summaries are indexed by section index after the update, but the source of a move is given in indices before the update.
+            let sourceSectionIndexAfterUpdate = sectionIndiciesAfterUpdate[indexPairBeforeUpdate.section]
+            
+            if sourceSectionIndexAfterUpdate == indexPairAfterUpdate.section {
                 perSectionSummaries[indexPairAfterUpdate.section].moves.append((indexPairBeforeUpdate.item, indexPairAfterUpdate.item))
             } else {
-                perSectionSummaries[indexPairBeforeUpdate.section].deletions.append(indexPairBeforeUpdate.item)
+                if let sourceSectionIndexAfterUpdate {
+                    perSectionSummaries[sourceSectionIndexAfterUpdate].deletions.append(indexPairBeforeUpdate.item)
+                }
                 perSectionSummaries[indexPairAfterUpdate.section].insertions.append(indexPairAfterUpdate.item)
             }
         }
@@ -130,7 +135,7 @@ struct DataBatchUpdate {
         }
         
         for (indexPairBeforeUpdate, indexPairAfterUpdate) in itemMoves {
-            if indexPairBeforeUpdate.section != indexPairAfterUpdate.section {
+            if sectionIndiciesAfterUpdate[indexPairBeforeUpdate.section] != indexPairAfterUpdate.section {
                 indexPairsAfterUpdate[indexPairBeforeUpdate] = indexPairAfterUpdate
             }
         }
