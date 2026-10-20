@@ -77,7 +77,7 @@ extension RandomAccessCollection where Index: BinaryInteger {
             }
         }
         
-        fatalError("binarySearch error, please check your comparison closure")
+        return nil
     }
     
     
