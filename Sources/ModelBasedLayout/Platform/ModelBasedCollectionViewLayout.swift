@@ -129,8 +129,8 @@ open class ModelBasedCollectionViewLayout<ModelType: LayoutModel>: NativeCollect
     }
     
     // MARK: Prepare: Transitions
-    public override func prepareForTransition(from oldLayout: UICollectionViewLayout) {
-        if let transitionLayout = oldLayout as? UICollectionViewTransitionLayout {
+    public override func prepareForTransition(from oldLayout: NativeCollectionViewLayout) {
+        if let transitionLayout = oldLayout as? NativeCollectionViewTransitionLayout {
             self.transitionLayout = transitionLayout
             self.transitioningFrom = transitionLayout.currentLayout
         } else {
@@ -146,8 +146,8 @@ open class ModelBasedCollectionViewLayout<ModelType: LayoutModel>: NativeCollect
         super.prepareForTransition(from: oldLayout)
     }
 
-    public override func prepareForTransition(to newLayout: UICollectionViewLayout) {
-        if let transitionLayout = newLayout as? UICollectionViewTransitionLayout {
+    public override func prepareForTransition(to newLayout: NativeCollectionViewLayout) {
+        if let transitionLayout = newLayout as? NativeCollectionViewTransitionLayout {
             self.transitionLayout = transitionLayout
             self.transitioningTo = transitionLayout.nextLayout
         } else {
