@@ -120,7 +120,40 @@ final class DataSourceCountsTests: XCTestCase {
             XCTAssertEqual(test.indexPair(before: allIndexPairs[i]), allIndexPairs[i - 1])
         }
     }
-    
+
+    func testIndexPairsEmptyRange() {
+        let test = DataSourceCounts(sections: [3, 2])
+        XCTAssertEqual(test.indexPairs(for: 0..<0), [])
+        XCTAssertEqual(test.indexPairs(for: 2..<2), [])
+
+        let empty = DataSourceCounts(sections: [])
+        XCTAssertEqual(empty.indexPairs(for: 0..<empty.itemCount), [])
+    }
+
+    func testIndexPairsWithEmptySections() {
+        let test = DataSourceCounts(sections: [0, 2, 0, 0, 3, 0])
+
+        let allIndexPairs = [
+            IndexPair(item: 0, section: 1), IndexPair(item: 1, section: 1),
+            IndexPair(item: 0, section: 4), IndexPair(item: 1, section: 4), IndexPair(item: 2, section: 4),
+        ]
+
+        XCTAssertEqual(test.indexPairs(for: 0..<test.itemCount), allIndexPairs)
+        for (index, indexPair) in allIndexPairs.enumerated() {
+            XCTAssertEqual(test.indexPair(for: index), indexPair)
+        }
+
+        for i in 0..<allIndexPairs.count-1 {
+            XCTAssertEqual(test.indexPair(after: allIndexPairs[i]), allIndexPairs[i + 1])
+        }
+        XCTAssertEqual(test.indexPair(after: allIndexPairs.last!), nil)
+
+        XCTAssertEqual(test.indexPair(before: allIndexPairs[0]), nil)
+        for i in 1..<allIndexPairs.count {
+            XCTAssertEqual(test.indexPair(before: allIndexPairs[i]), allIndexPairs[i - 1])
+        }
+    }
+
     func testContains() {
         let test = DataSourceCounts(sections: [100, 50, 25, 25])
         

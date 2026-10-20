@@ -100,19 +100,21 @@ public struct DataSourceCounts: Codable {
     }
     
     public func indexPair(before indexPair: IndexPair) -> IndexPair? {
-        if indexPair.item == 0 {
-            return indexPair.section > 0 ? IndexPair(item: sections[indexPair.section - 1].itemCount - 1, section: indexPair.section - 1) : nil
-        } else {
+        if indexPair.item > 0 {
             return IndexPair(item: indexPair.item - 1, section: indexPair.section)
         }
+        // Skip empty sections, they contain no index pairs.
+        guard let section = self.sections[..<indexPair.section].last(where: { $0.itemCount > 0 }) else { return nil }
+        return section.lastItemIndexPair
     }
     
     public func indexPair(after indexPair: IndexPair) -> IndexPair? {
-        if indexPair.item == self.sections[indexPair.section].itemCount - 1 {
-            return indexPair.section < self.numberOfSections - 1 ? IndexPair(item: 0, section: indexPair.section + 1) : nil
-        } else {
+        if indexPair.item < self.sections[indexPair.section].itemCount - 1 {
             return IndexPair(item: indexPair.item + 1, section: indexPair.section)
         }
+        // Skip empty sections, they contain no index pairs.
+        guard let section = self.sections[(indexPair.section + 1)...].first(where: { $0.itemCount > 0 }) else { return nil }
+        return section.firstItemIndexPair
     }
     
     public func indexPairs(for range: ClosedRange<Int>) -> [IndexPair] {
@@ -142,7 +144,7 @@ public struct DataSourceCounts: Codable {
                 if firstIndexPair.section+1 <= lastIndexPair.section-1 {
                     for sectionIndex in firstIndexPair.section+1...lastIndexPair.section-1 {
                         let sectionData = self.sections[sectionIndex]
-                        for itemIndex in 0...sectionData.itemCount-1 {
+                        for itemIndex in 0..<sectionData.itemCount {
                             buffer[index] = IndexPair(item: itemIndex, section: sectionIndex)
                             index += 1
                         }
@@ -162,6 +164,7 @@ public struct DataSourceCounts: Codable {
     }
     
     public func indexPairs(for range: Range<Int>) -> [IndexPair] {
+        guard !range.isEmpty else { return [] }
         return indexPairs(for: range.lowerBound...range.upperBound-1)
     }
 }
