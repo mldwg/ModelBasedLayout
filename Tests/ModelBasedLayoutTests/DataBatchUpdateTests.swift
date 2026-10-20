@@ -352,13 +352,13 @@ final class DataBatchUpdateTests: XCTestCase {
             IndexPair(item: 1, section: 2): IndexPair(item: 1, section: 0),
             IndexPair(item: 2, section: 2): IndexPair(item: 2, section: 0),
             
-            // section inserted here
-            
             IndexPair(item: 0, section: 3): IndexPair(item: 0, section: 5),
             IndexPair(item: 1, section: 3): IndexPair(item: 1, section: 5),
             IndexPair(item: 2, section: 3): IndexPair(item: 2, section: 5),
-            
-            IndexPair(item: 0, section: 4): IndexPair(item: 0, section: 2),
+
+            IndexPair(item: 0, section: 4): IndexPair(item: 0, section: 1),
+
+            // section inserted at index 2, insertions are indices after the update
             
             IndexPair(item: 0, section: 5): IndexPair(item: 0, section: 3),
             
@@ -392,6 +392,28 @@ final class DataBatchUpdateTests: XCTestCase {
             updates.append(.insertSection(sectionIndex: Int.random(in: 0...100_000, using: &rng)))
         }
         
+        self.measure {
+            _ = DataBatchUpdate(dataSourceCounts: dataSourceCounts, updateItems: updates)
+        }
+    }
+
+    func testItemInsertionsPerformance() throws {
+        let dataSourceCounts = DataSourceCounts(sections: [100_000])
+        var updates: [DataUpdate] = []
+        for item in stride(from: 0, to: 110_000, by: 11) {
+            updates.append(.insertItem(indexPair: IndexPair(item: item, section: 0)))
+        }
+
+        self.measure {
+            _ = DataBatchUpdate(dataSourceCounts: dataSourceCounts, updateItems: updates)
+        }
+    }
+
+    /// A single change in a large data set, the most common kind of update.
+    func testSingleItemChangePerformance() throws {
+        let dataSourceCounts = DataSourceCounts(sections: Array(repeating: 100, count: 1_000))
+        let updates: [DataUpdate] = [.insertItem(indexPair: IndexPair(item: 0, section: 500))]
+
         self.measure {
             _ = DataBatchUpdate(dataSourceCounts: dataSourceCounts, updateItems: updates)
         }
@@ -434,5 +456,72 @@ final class DataBatchUpdateTests: XCTestCase {
             XCTAssertEqual(changes.indexPairAfterUpdate(for: IndexPair(item: item, section: 1)), IndexPair(item: item, section: 0))
         }
         XCTAssertEqual(changes.indexPairAfterUpdate(for: IndexPair(item: 4, section: 1)), IndexPair(item: 0, section: 1))
+    }
+
+    /// Asserts that every index pair before the update maps to the expected one after it, and back.
+    private func assertMapping(_ changes: DataBatchUpdate, _ expected: [IndexPair: IndexPair?], file: StaticString = #filePath, line: UInt = #line) {
+        for (indexPairBeforeUpdate, indexPairAfterUpdate) in expected {
+            XCTAssertEqual(changes.indexPairAfterUpdate(for: indexPairBeforeUpdate), indexPairAfterUpdate, "after update for \(indexPairBeforeUpdate)", file: file, line: line)
+            if let indexPairAfterUpdate {
+                XCTAssertEqual(changes.indexPairBeforeUpdate(for: indexPairAfterUpdate), indexPairBeforeUpdate, "before update for \(indexPairAfterUpdate)", file: file, line: line)
+            }
+        }
+    }
+
+    /// The source of a move is given in indices before the update, so deletions in front of it must not shift it.
+    func testMoveItemWithinSectionWithDeletion() throws {
+        let dataSourceCounts = DataSourceCounts(sections: [4])
+
+        // a b c d -> d b c
+        let updates: [DataUpdate] = [
+            .deleteItem(indexPair: IndexPair(item: 0, section: 0)),
+            .moveItem(indexPairBeforeUpdate: IndexPair(item: 3, section: 0), indexPairAfterUpdate: IndexPair(item: 0, section: 0)),
+        ]
+        let changes = DataBatchUpdate(dataSourceCounts: dataSourceCounts, updateItems: updates)
+
+        assertMapping(changes, [
+            IndexPair(item: 0, section: 0): nil,
+            IndexPair(item: 1, section: 0): IndexPair(item: 1, section: 0),
+            IndexPair(item: 2, section: 0): IndexPair(item: 2, section: 0),
+            IndexPair(item: 3, section: 0): IndexPair(item: 0, section: 0),
+        ])
+    }
+
+    /// The source of a move is given in indices before the update, so insertions in front of it must not shift it.
+    func testMoveItemWithinSectionWithInsertion() throws {
+        let dataSourceCounts = DataSourceCounts(sections: [3])
+
+        // a b c -> x c a b
+        let updates: [DataUpdate] = [
+            .insertItem(indexPair: IndexPair(item: 0, section: 0)),
+            .moveItem(indexPairBeforeUpdate: IndexPair(item: 2, section: 0), indexPairAfterUpdate: IndexPair(item: 1, section: 0)),
+        ]
+        let changes = DataBatchUpdate(dataSourceCounts: dataSourceCounts, updateItems: updates)
+
+        assertMapping(changes, [
+            IndexPair(item: 0, section: 0): IndexPair(item: 2, section: 0),
+            IndexPair(item: 1, section: 0): IndexPair(item: 3, section: 0),
+            IndexPair(item: 2, section: 0): IndexPair(item: 1, section: 0),
+        ])
+        XCTAssertEqual(changes.indexPairBeforeUpdate(for: IndexPair(item: 0, section: 0)), nil)
+    }
+
+    /// Same as `testMoveItemWithinSectionWithDeletion`, one level up.
+    func testMoveSectionWithSectionDeletion() throws {
+        let dataSourceCounts = DataSourceCounts(sections: [1, 1, 1, 1])
+
+        // a b c d -> d b c
+        let updates: [DataUpdate] = [
+            .deleteSection(sectionIndex: 0),
+            .moveSection(sectionIndexBeforeUpdate: 3, sectionIndexAfterUpdate: 0),
+        ]
+        let changes = DataBatchUpdate(dataSourceCounts: dataSourceCounts, updateItems: updates)
+
+        assertMapping(changes, [
+            IndexPair(item: 0, section: 0): nil,
+            IndexPair(item: 0, section: 1): IndexPair(item: 0, section: 1),
+            IndexPair(item: 0, section: 2): IndexPair(item: 0, section: 2),
+            IndexPair(item: 0, section: 3): IndexPair(item: 0, section: 0),
+        ])
     }
 }

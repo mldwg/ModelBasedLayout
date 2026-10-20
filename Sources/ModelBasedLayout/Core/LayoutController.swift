@@ -93,7 +93,7 @@ class LayoutController<ModelType: LayoutModel> {
     
     func prepareForBoundsChange(oldBounds: CGRect) {
         prepareIfNeeded()
-        prepareContentOffsetAnchor(oldBounds: oldBounds)
+        prepareContentOffsetAnchor(oldBounds: oldBounds, in: stateController.layout(.afterUpdate))
         if self.dataSourceCounts(.beforeUpdate) == nil && self.geometryInfo(.afterUpdate) != stateController.geometryInfoProvider() {
             self.stateController.pushNewLayout()
         }
@@ -116,6 +116,10 @@ class LayoutController<ModelType: LayoutModel> {
     }
 
     func prepare(forCollectionViewUpdates updateItems: [NativeCollectionViewUpdateItem]) {
+        self.prepare(forDataUpdates: updateItems.compactMap { DataUpdate($0) })
+    }
+    
+    func prepare(forDataUpdates updateItems: [DataUpdate]) {
         self.prepareIfNeeded()
         
         guard !updateItems.isEmpty else { return }
@@ -149,12 +153,15 @@ class LayoutController<ModelType: LayoutModel> {
         self.stickyController(.afterUpdate)?.usesStickyViews ?? false
     }
     
-    private func prepareContentOffsetAnchor(oldBounds: CGRect) -> ContentOffsetAnchor? {
-        if contentOffsetAnchor == nil, var currentBounds = self.boundsController(.afterUpdate)?.boundsInfo {
+    /// - Parameter container: The layout the anchor is taken from. Must be the layout the change starts from, since the anchor is later mapped into the target layout.
+    @discardableResult
+    private func prepareContentOffsetAnchor(oldBounds: CGRect, in container: LayoutContainer<ModelType>?) -> ContentOffsetAnchor? {
+        if contentOffsetAnchor == nil, let container {
+            var currentBounds = container.boundsController.boundsInfo
             if currentBounds.bounds.size == oldBounds.size {
                 currentBounds.bounds = oldBounds
             }
-            contentOffsetAnchor = stateController.layout(.afterUpdate)?.model.contentOffsetAnchor(in: currentBounds)
+            contentOffsetAnchor = container.model.contentOffsetAnchor(in: currentBounds)
         }
         return contentOffsetAnchor
     }
@@ -194,7 +201,7 @@ class LayoutController<ModelType: LayoutModel> {
             return nil
         }
         
-        guard var contentOffsetAnchor = prepareContentOffsetAnchor(oldBounds: oldBounds.bounds) else {
+        guard var contentOffsetAnchor = prepareContentOffsetAnchor(oldBounds: oldBounds.bounds, in: originContainer) else {
             return nil
         }
         
